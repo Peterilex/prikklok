@@ -1,0 +1,135 @@
+index.html
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<title>Prikklok</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+  font-family: -apple-system, Arial;
+  text-align: center;
+  padding: 20px;
+}
+h1 { font-size: 28px; }
+button {
+  font-size: 34px;
+  padding: 35px;
+  width: 90%;
+  border-radius: 18px;
+  border: none;
+  margin: 20px 0;
+}
+.running { background: #c62828; color: white; }
+.stopped { background: #2e7d32; color: white; }
+
+.info {
+  font-size: 20px;
+  margin: 10px 0;
+}
+.small {
+  font-size: 16px;
+  color: #555;
+}
+</style>
+</head>
+
+<body>
+<h1>Prikklok</h1>
+
+<button id="btn" class="stopped">START</button>
+
+<div class="info" id="status">Niet actief</div>
+<div class="info" id="dayTotal">Vandaag: 00:00</div>
+<div class="info" id="weekTotal">Deze week: 00:00</div>
+
+<button onclick="exportCSV()">Export naar Excel</button>
+
+<p class="small">Tijden worden direct vastgezet</p>
+
+<script>
+let startTime = null;
+let logs = JSON.parse(localStorage.getItem("logs") || "[]");
+
+const btn = document.getElementById("btn");
+const status = document.getElementById("status");
+const dayTotalEl = document.getElementById("dayTotal");
+const weekTotalEl = document.getElementById("weekTotal");
+
+function pad(n){ return n.toString().padStart(2,'0'); }
+
+function formatTime(d){
+  return pad(d.getHours()) + ":" + pad(d.getMinutes());
+}
+
+function minutesBetween(a,b){
+  return Math.round((b - a) / 60000);
+}
+
+btn.onclick = function() {
+  if (!startTime) {
+    startTime = new Date();
+    btn.textContent = "STOP";
+    btn.className = "running";
+    status.textContent = "Gestart om " + formatTime(startTime);
+  } else {
+    let stopTime = new Date();
+    logs.push({
+      date: startTime.toISOString().slice(0,10),
+      start: formatTime(startTime),
+      stop: formatTime(stopTime),
+      minutes: minutesBetween(startTime, stopTime)
+    });
+    localStorage.setItem("logs", JSON.stringify(logs));
+    startTime = null;
+    btn.textContent = "START";
+    btn.className = "stopped";
+    status.textContent = "Gestopt om " + formatTime(stopTime);
+    updateTotals();
+  }
+};
+
+function updateTotals(){
+  let today = new Date().toISOString().slice(0,10);
+  let now = new Date();
+  let week = getWeek(now);
+
+  let dayMin = 0;
+  let weekMin = 0;
+
+  logs.forEach(l => {
+    if (l.date === today) dayMin += l.minutes;
+    if (getWeek(new Date(l.date)) === week) weekMin += l.minutes;
+  });
+
+  dayTotalEl.textContent = "Vandaag: " + toHHMM(dayMin);
+  weekTotalEl.textContent = "Deze week: " + toHHMM(weekMin);
+}
+
+function toHHMM(min){
+  return pad(Math.floor(min/60)) + ":" + pad(min%60);
+}
+
+function getWeek(d){
+  d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+  let yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+}
+
+function exportCSV(){
+  let csv = "Datum,Start,Stop,Duur (min)\n";
+  logs.forEach(l => {
+    csv += `${l.date},${l.start},${l.stop},${l.minutes}\n`;
+  });
+  let blob = new Blob([csv], { type: "text/csv" });
+  let a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "prikklok.csv";
+  a.click();
+}
+
+updateTotals();
+</script>
+</body>
+</html>
